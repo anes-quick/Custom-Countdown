@@ -512,7 +512,7 @@
         </div>
         <span class="track hidden" id="spotifyTrack">Not connected</span>
       </div>
-      <div class="remain" id="remain" aria-live="polite">00:00:00</div>
+      <div class="remain" id="remain" aria-live="polite">0</div>
       <div class="goal-wrap">
         <div class="goal" id="goal" role="button" tabindex="0" title="Double-click to edit goal time">--:--</div>
       </div>
@@ -633,13 +633,27 @@
     const spotifyTrack = document.getElementById('spotifyTrack');
     const todoEl = document.getElementById('todo');
 
+    /** Device timezone (all countdown math already runs in the browser — nothing from the server sets the clock). */
+    function getUserTimeZone() {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      } catch {
+        return '';
+      }
+    }
+
+    /** Duration left — shown as `23h 17m` so it is not mistaken for clock time. */
     function formatRemain(ms) {
       const s = Math.max(0, Math.floor(ms / 1000));
       const h = Math.floor(s / 3600);
       const m = Math.floor((s % 3600) / 60);
-      const hh = String(h).padStart(2, '0');
-      const mm = String(m).padStart(2, '0');
-      return `${hh}<span class="sep">:</span>${mm}`;
+      if (h > 0) {
+        return `${h}h<span class="sep"> </span>${String(m).padStart(2, '0')}m`;
+      }
+      if (m > 0) {
+        return `${m}m`;
+      }
+      return '0';
     }
 
     function formatPct(p) {
@@ -652,7 +666,10 @@
 
     function formatGoalTime(ts) {
       const d = new Date(ts);
-      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+      const tz = getUserTimeZone();
+      const opts = { hour: '2-digit', minute: '2-digit', hour12: false };
+      if (tz) opts.timeZone = tz;
+      return d.toLocaleTimeString(undefined, opts);
     }
 
     function parseTimeToEndMs(text) {
@@ -681,9 +698,19 @@
 
       const left = Math.max(0, endMs - now);
       elRemain.innerHTML = formatRemain(left);
+      const sLeft = Math.max(0, Math.floor(left / 1000));
+      const hLeft = Math.floor(sLeft / 3600);
+      const mLeft = Math.floor((sLeft % 3600) / 60);
+      elRemain.title =
+        hLeft > 0
+          ? `Time remaining: ${hLeft}h ${mLeft}m (your device time)`
+          : mLeft > 0
+            ? `Time remaining: ${mLeft} minutes (your device time)`
+            : 'Countdown finished';
       elBar.style.width = progress + '%';
       elPct.textContent = formatPct(progress);
       elGoal.textContent = formatGoalTime(endMs);
+      elGoal.title = `Goal time (${getUserTimeZone() || 'local'})`;
     }
 
     let goalEdit = null;
