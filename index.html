@@ -551,9 +551,12 @@
   <script>
     const STORAGE_KEY = 'countdownApp:v1';
 
+    // Production: set your Railway HTTPS URL after deploy (no trailing slash).
+    // Example: https://custom-countdown-api-production-xxxx.up.railway.app
+    const BACKEND_URL_PRODUCTION = '';
     const BACKEND_URL = /localhost|127\.0\.0\.1/.test(window.location.hostname)
       ? 'http://localhost:8001'
-      : 'https://YOUR-RAILWAY-APP.up.railway.app';
+      : (BACKEND_URL_PRODUCTION.trim().replace(/\/$/, '') || 'https://YOUR-RAILWAY-APP.up.railway.app');
 
     const defaultColors = () => ({
       bg: '#000000',
