@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import os
 import secrets
 import time
@@ -22,11 +24,36 @@ SPOTIFY_SCOPES = (
 )
 
 spotify_state: dict[str, Any] = {
-    "oauth_state": None,
     "access_token": None,
     "refresh_token": None,
     "expires_at": 0,
 }
+
+
+def build_oauth_state() -> str:
+    """Signed state so /callback works across restarts and multiple Railway replicas."""
+    nonce = secrets.token_urlsafe(16)
+    secret = get_env_required("SPOTIFY_CLIENT_SECRET").encode("utf-8")
+    sig = hmac.new(secret, nonce.encode("utf-8"), hashlib.sha256).hexdigest()
+    payload = f"{nonce}.{sig}"
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("utf-8").rstrip("=")
+
+
+def verify_oauth_state(state: str) -> bool:
+    if not state:
+        return False
+    secret_raw = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
+    if not secret_raw:
+        return False
+    try:
+        pad = "=" * (-len(state) % 4)
+        decoded = base64.urlsafe_b64decode(state + pad).decode("utf-8")
+        nonce, sig = decoded.split(".", 1)
+        secret = secret_raw.encode("utf-8")
+        expected = hmac.new(secret, nonce.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected)
+    except Exception:
+        return False
 
 
 class ActionResponse(BaseModel):
@@ -151,8 +178,7 @@ def get_current_track_id(token: str) -> Optional[str]:
 async def spotify_login() -> RedirectResponse:
     client_id = get_env_required("SPOTIFY_CLIENT_ID")
     redirect_uri = get_env_required("SPOTIFY_REDIRECT_URI")
-    state = secrets.token_urlsafe(24)
-    spotify_state["oauth_state"] = state
+    state = build_oauth_state()
     params = urllib.parse.urlencode(
         {
             "response_type": "code",
@@ -174,8 +200,7 @@ async def spotify_callback(code: str = "", state: str = "", error: str = "") -> 
         return RedirectResponse(url=f"{frontend_url}/?spotify=error", status_code=307)
     if not code:
         return RedirectResponse(url=f"{frontend_url}/?spotify=missing_code", status_code=307)
-    expected_state = spotify_state.get("oauth_state")
-    if not expected_state or state != expected_state:
+    if not verify_oauth_state(state):
         return RedirectResponse(url=f"{frontend_url}/?spotify=state_mismatch", status_code=307)
     token_data = token_request(
         {

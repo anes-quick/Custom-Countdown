@@ -21,9 +21,14 @@ def load_local_env() -> None:
 def create_app() -> FastAPI:
     load_local_env()
     app = FastAPI(title="Countdown Backend", version="0.1.0")
+
+    @app.get("/")
+    async def root() -> dict[str, str]:
+        return {"service": "countdown-backend", "health": "/api/health"}
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[],
+        allow_origins=["https://custom-countdown-kappa.vercel.app"],
         allow_origin_regex=r"https://.*\.vercel\.app|^http://(127\.0\.0\.1|localhost)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
